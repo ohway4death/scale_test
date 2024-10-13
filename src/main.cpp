@@ -1,120 +1,67 @@
+/*
+*******************************************************************************
+* Copyright (c) 2023 by M5Stack
+*                  Equipped with M5Core sample source code
+*                          配套  M5Core 示例源代码
+* Visit for more information: https://docs.m5stack.com/en/core/gray
+* 获取更多资料请访问: https://docs.m5stack.com/zh_CN/core/gray
+*
+* Describe: Weight.
+* Date: 2021/8/20
+*******************************************************************************
+  Please connect to Port B,Use WEIGHT Unit to read the analog value returned by
+the pressure sensor, convert it into intuitive weight data and send it to
+M5Core,Press ButtonA to calibrate 请连接端口B,使用WEIGHT
+Unit读取压力传感器返回的模拟值，将其转换为直观的重量数据，发送到M5Core，按下按钮A进行校准
+*/
+
 #include <M5Core2.h>
+#include <M5GFX.h>
+
 #include "HX711.h"
+
+M5GFX display;
+M5Canvas canvas(&display);
+
+// HX711 related pin Settings.  HX711 相关引脚设置
+#define LOADCELL_DOUT_PIN 36
+#define LOADCELL_SCK_PIN 26
 
 HX711 scale;
 
-// test 
-
-void AE_HX711_Init(void);
-void AE_HX711_Reset(void);
-long AE_HX711_Read(void);
-long AE_HX711_Averaging(long adc,char num);
-float AE_HX711_getGram(char num);
-
-#define pin_dout  36    // GROVE-B Yellow
-#define pin_slk   26    // GROVE-B White
-
-//---------------------------------------------------//
-// ロードセル　シングルポイント（ビーム型）　ＳＣ６１６Ｃ　５００ｇ[P-12532]
-//---------------------------------------------------//
-#define OUT_VOL   0.0007f   //定格出力 [V]
-#define LOAD      3000.0f    //定格容量 [g]
-
-float offset;
-
-void setup() {
-  M5.begin();
-  M5.Lcd.clear(BLACK);
-  M5.Lcd.setTextSize(2);
-  M5.Lcd.setTextColor(YELLOW);
-  M5.Lcd.setCursor(50,10);
-  M5.Lcd.print("AE-HX711 Example");
-
-  Serial.begin(9600);
-  Serial.println("AE-HX711 Example");
-
-  AE_HX711_Init();
-  AE_HX711_Reset();
-  offset = AE_HX711_getGram(50); 
-
-  M5.Lcd.setCursor(0,90);
-  M5.Lcd.print("The weight:");
-}
-
-void loop() {
-float data;
-  char S1[20];
-  char s[20];
-  data = AE_HX711_getGram(10);
-  sprintf(S1,"%s",dtostrf((data-offset), 5, 1, s));
-  Serial.println(S1);
-  M5.Lcd.fillRect(150,90,100,20,BLACK);
-  M5.Lcd.setCursor(150,90);
-  M5.Lcd.print(S1);
-}
- 
-void AE_HX711_Init(void)
+void setup()
 {
-  pinMode(pin_slk, OUTPUT);
-  pinMode(pin_dout, INPUT);
+  M5.begin(); // Init M5Stack.  初始化M5Stack
+  // M5.Power.begin(); // Init power  初始化电源模块
+  display.begin();
+  canvas.setColorDepth(1); // mono color
+  canvas.createSprite(display.width(), display.height());
+  canvas.setTextDatum(MC_DATUM);
+  canvas.setPaletteColor(1, GREEN);
+
+  canvas.drawString("Calibration sensor....", 160, 80);
+  canvas.pushSprite(0, 0);
+  scale.begin(LOADCELL_DOUT_PIN, LOADCELL_SCK_PIN);
+  // The scale value is the adc value corresponding to 1g
+  scale.set_scale(680.f); // set scale
+  scale.tare();      // auto set offset
 }
- 
-void AE_HX711_Reset(void)
+
+void loop()
 {
-  digitalWrite(pin_slk,1);
-  delayMicroseconds(100);
-  digitalWrite(pin_slk,0);
-  delayMicroseconds(100); 
-}
- 
-long AE_HX711_Read(void)
-{
-  long data=0;
-  while(digitalRead(pin_dout)!=0);
-  delayMicroseconds(10);
-  for(int i=0;i<24;i++)
+  canvas.fillSprite(BLACK);
+  canvas.setTextSize(1);
+  canvas.drawString("Connect the Weight Unit to PortB(G26,G36)", 160, 40);
+  canvas.drawString("Click Btn A for Calibration", 160, 80);
+  int weight = scale.get_units(10);
+  canvas.setTextSize(3);
+  canvas.drawString("Weight:" + String(weight) + "g", 160, 150);
+  M5.update();
+  if (M5.BtnA.wasPressed())
   {
-    digitalWrite(pin_slk,1);
-    delayMicroseconds(5);
-    digitalWrite(pin_slk,0);
-    delayMicroseconds(5);
-    data = (data<<1)|(digitalRead(pin_dout));
+    scale.set_scale(61.2f);
+    scale.tare();
+    canvas.drawString("Calibration!", 160, 180);
   }
-  //Serial.println(data,HEX);   
-  digitalWrite(pin_slk,1);
-  delayMicroseconds(10);
-  digitalWrite(pin_slk,0);
-  delayMicroseconds(10);
-  return data^0x800000; 
-}
- 
- 
-long AE_HX711_Averaging(long adc,char num)
-{
-  long sum = 0;
-  for (int i = 0; i < num; i++) sum += AE_HX711_Read();
-  return sum / num;
-}
- 
-float AE_HX711_getGram(char num)
-{
-  #define HX711_R1  20000.0f
-  #define HX711_R2  8200.0f
-  #define HX711_VBG 1.25f
-  #define HX711_AVDD      4.2987f//(HX711_VBG*((HX711_R1+HX711_R2)/HX711_R2))
-  #define HX711_ADC1bit   HX711_AVDD/16777216 //16777216=(2^24)
-  #define HX711_PGA 128
-  #define HX711_SCALE     (OUT_VOL * HX711_AVDD / LOAD *HX711_PGA)
-   
-  float data;
- 
-  data = AE_HX711_Averaging(AE_HX711_Read(),num)*HX711_ADC1bit; 
-  //Serial.println( HX711_AVDD);   
-  //Serial.println( HX711_ADC1bit);   
-  //Serial.println( HX711_SCALE);   
-  //Serial.println( data);   
-  data =  data / HX711_SCALE;
- 
- 
-  return data;
+  canvas.pushSprite(0, 0);
 }
