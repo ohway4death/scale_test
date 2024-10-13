@@ -3,7 +3,7 @@
 
 HX711 scale;
 
-// test
+// test 
 
 void AE_HX711_Init(void);
 void AE_HX711_Reset(void);
